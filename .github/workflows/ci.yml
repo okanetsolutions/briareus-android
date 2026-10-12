@@ -85,8 +85,8 @@ jobs:
             density: 420
             wide: 'false'
             page_size: 4096
-          - device: tablet-api37
-            api: '37.1'
+          - device: tablet-api35
+            api: '35'
             target: google_apis_ps16k
             size: 1920x1200
             density: 160

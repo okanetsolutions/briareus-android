@@ -1,13 +1,13 @@
 # Android CI and release delivery
 
-Every pull request and push to `main` runs `Android CI`. `Android checks` passes only after every required job succeeds; cancelled, failed or unexpectedly skipped jobs fail that final check. PR builds have no production signing secrets.
+Every pull request and push to `main` runs `Android CI`. Branch protection requires both `Android checks` and the separate `CodeQL` security result. `Android checks` passes only after every required job succeeds; cancelled, failed or unexpectedly skipped jobs fail that final check. PR builds have no production signing secrets.
 
 | Job | What it verifies |
 | --- | --- |
 | Build, test, lint and release signing | Gradle wrapper checksum, pinned contracts, all JVM tests, JaCoCo coverage, detekt, debug/release Android lint, debug/test/release APKs and release AAB |
 | Release package verification | Disposable-key APK and AAB signatures, application ID, SDK levels, non-debuggable release and 16 KB ZIP alignment |
 | Device tests: phone API 31 | Native pairing validation, activity recreation, keyboard input, compact navigation and minified release startup |
-| Device tests: tablet API 37 | The same behaviors in the wide layout on a 16 KB system image |
+| Device tests: tablet API 35 | The same behaviors in the wide layout on a 16 KB system image |
 | Dependency vulnerability review | Resolved Gradle dependencies submitted to GitHub, blocking newly introduced high/critical advisories on PRs |
 | Security analysis | CodeQL Java/Kotlin security-and-quality queries |
 | Formatting | `.editorconfig` |
@@ -15,7 +15,7 @@ Every pull request and push to `main` runs `Android CI`. `Android checks` passes
 
 Core coverage must remain at least 90% of lines and 65% of branches. These floors start just below the existing suite's measured coverage; they apply to all core classes, without excluding difficult classes to raise the result. Android instrumented tests are separate and are not counted in the JVM coverage report.
 
-The phone runs API 31, the oldest supported Android version. The tablet uses the stable Android 17 QPR1 image, API 37.1, with 16 KB pages; the app still compiles and targets API 37.0. The emulator uses the supported `software` graphics backend, as described in [Android's acceleration documentation](https://developer.android.com/studio/run/emulator-acceleration). The jobs set window sizes explicitly and assert that they actually exercise the intended compact/wide layout. The job invokes AndroidJUnitRunner directly and requires four completed passing tests plus a successful JUnit summary; an adb exit code alone cannot make an empty run pass. Raw instrumentation output and logcat are retained on failure. After instrumentation, each emulator installs and opens the minified release APK, catching startup problems that a debug-only test would miss.
+The phone runs API 31, the oldest supported Android version. The tablet uses Android 15, API 35, with 16 KB pages; the app compiles and targets API 37. Android 17.0 and 17.1 emulator images repeatedly aborted SurfaceFlinger or system_server in `mapper.ranchu` DMA readback, before the app could finish its lifecycle tests. The full tablet suite therefore uses the supported Android 15 image; Android 17 runtime acceptance remains required on physical hardware or a corrected emulator image. The emulator uses the supported `software` graphics backend, as described in [Android's acceleration documentation](https://developer.android.com/studio/run/emulator-acceleration). The jobs set window sizes explicitly and assert that they actually exercise the intended compact/wide layout. The job invokes AndroidJUnitRunner directly and requires four completed passing tests plus a successful JUnit summary; an adb exit code alone cannot make an empty run pass. Raw instrumentation output and logcat are retained on failure. After instrumentation, each emulator installs and opens the minified release APK, catching startup problems that a debug-only test would miss.
 
 The workflow uploads APKs, the AAB, R8 mapping, package hashes, test/lint/coverage reports and emulator failure evidence. `Android-packages-ci-only` uses a disposable key and is for testing only; it is not an upgrade channel. Dependabot checks Gradle dependencies and GitHub Actions weekly. CodeQL also runs weekly.
 
