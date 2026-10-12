@@ -6,6 +6,10 @@ set -euo pipefail
 : "${EXPECTED_PAGE_SIZE:?}"
 trap 'adb logcat -d > device-logcat.txt; adb shell df -h /data > device-storage.txt' EXIT
 test "$(adb shell getconf PAGE_SIZE | tr -d '\r')" = "$EXPECTED_PAGE_SIZE"
+# Recent emulator images crash in SurfaceFlinger's gesture-region sampler.
+if [ "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" -ge 36 ]; then
+  adb shell cmd overlay enable-exclusive --user 0 --category com.android.internal.systemui.navbar.threebutton
+fi
 adb shell wm size "$DEVICE_SIZE"
 adb shell wm density "$DEVICE_DENSITY"
 ./gradlew assembleDebug assembleDebugAndroidTest -Pwerror --console=plain
