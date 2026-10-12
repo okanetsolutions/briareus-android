@@ -135,6 +135,9 @@ jobs:
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+            device-instrumentation.txt
+            device-logcat.txt
+            device-storage.txt
             release-start.txt
             release-window.xml
             release-logcat.txt

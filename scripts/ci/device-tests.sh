@@ -4,17 +4,21 @@ set -euo pipefail
 : "${DEVICE_SIZE:?}"
 : "${DEVICE_DENSITY:?}"
 : "${EXPECTED_PAGE_SIZE:?}"
+trap 'adb logcat -d > device-logcat.txt; adb shell df -h /data > device-storage.txt' EXIT
 test "$(adb shell getconf PAGE_SIZE | tr -d '\r')" = "$EXPECTED_PAGE_SIZE"
 adb shell wm size "$DEVICE_SIZE"
 adb shell wm density "$DEVICE_DENSITY"
-./gradlew connectedDebugAndroidTest -Pwerror --console=plain \
-  "-Pandroid.testInstrumentationRunnerArguments.expectedWide=$EXPECTED_WIDE"
+./gradlew assembleDebug assembleDebugAndroidTest -Pwerror --console=plain
+app_id=com.okanetsolutions.briareus.android
+adb logcat -c
+adb install -t app/build/outputs/apk/debug/app-debug.apk
+adb install -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb shell am instrument -w -r -e expectedWide "$EXPECTED_WIDE" \
+  "$app_id.test/androidx.test.runner.AndroidJUnitRunner" | tee device-instrumentation.txt
 python3 scripts/ci/device-summary.py
 # The minified release must start too; debug instrumentation does not exercise R8.
-app_id=com.okanetsolutions.briareus.android
-if adb shell pm list packages | tr -d '\r' | grep -Fxq "package:$app_id"; then
-  adb uninstall "$app_id"
-fi
+adb uninstall "$app_id.test"
+adb uninstall "$app_id"
 adb install app/build/outputs/apk/release/app-release.apk
 adb logcat -c
 adb shell am start -W -n "$app_id/.MainActivity" | tee release-start.txt
