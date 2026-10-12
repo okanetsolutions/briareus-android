@@ -3,6 +3,7 @@ package com.okanetsolutions.briareus.android
 import android.content.Context
 import android.content.Intent
 import androidx.core.net.toUri
+import androidx.core.os.BundleCompat
 import com.okanetsolutions.briareus.core.ScreenAction
 import com.okanetsolutions.briareus.core.Session
 import com.okanetsolutions.briareus.core.Voice
@@ -42,8 +43,7 @@ class Navigator(context: Context, private val store: Store) {
 
     fun restore(state: android.os.Bundle?) {
         if (state == null || current.value != null) return
-        @Suppress("DEPRECATION")
-        val saved = (state.getSerializable("navigation") as? ArrayList<*>)?.map { it as? Pane }.orEmpty()
+        val saved = BundleCompat.getSerializable(state, "navigation", ArrayList::class.java)?.map { it as? Pane }.orEmpty()
         if (saved.isNotEmpty()) {
             history.addAll(saved.dropLast(1))
             current.value = saved.last()

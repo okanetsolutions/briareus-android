@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.view.View
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
+import android.webkit.WebSettings
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -22,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,12 +38,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import com.okanetsolutions.briareus.core.PreviewAccess
+import com.okanetsolutions.briareus.core.PreviewOrigin
+import com.okanetsolutions.briareus.core.previewUrl
 import com.okanetsolutions.briareus.android.Store
+import kotlinx.coroutines.ensureActive
 
 /**
  * A ▶ Run preview in a browser of the app's own, as the Windows client does it. Cloudflare Access guards the preview
- * hosts; a page load there carries the server's service token, and Access answers with its own cookie, which lets the
- * page's other requests through. Without a token the page shows Access's sign-in, and its cookie keeps the sign-in.
+ * hosts; only the initial HTTPS preview origin stays embedded, while other sites open in the system browser.
+ * Service credentials are sent only to canonical hosts covered by the server's preview suffix.
  */
 @Composable
 fun PreviewScreen(store: Store, url: String) {
@@ -49,9 +54,15 @@ fun PreviewScreen(store: Store, url: String) {
     val context = LocalContext.current
     var address by remember { mutableStateOf(url) }
     var canGoBack by remember { mutableStateOf(false) }
-    val browser = remember { PreviewBrowser(context) { now, back -> address = now; canGoBack = back } }
+    val browser = remember(url) { PreviewBrowser(context, url, store::say) { now, back -> address = now; canGoBack = back } }
+    DisposableEffect(browser) { onDispose { browser.close() } }
 
-    LaunchedEffect(url) { browser.access = store.previewAccess(); browser.load(url) }
+    LaunchedEffect(url) {
+        val client = store.client
+        val credentials = store.previewAccess()
+        ensureActive()
+        if (client === store.client) { browser.access = credentials; browser.load(url) }
+    }
     BackHandler(enabled = canGoBack) { browser.back() }
 
     Column(Modifier.fillMaxSize().background(p.canvas)) {
@@ -60,7 +71,9 @@ fun PreviewScreen(store: Store, url: String) {
             Text(address, Modifier.weight(1f).padding(horizontal = 12.dp), style = MaterialTheme.typography.bodyMedium, color = p.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             IconButton(onClick = { browser.reload(url) }) { Icon(Icons.Outlined.Refresh, "Reload", tint = p.muted) }
             IconButton(onClick = {
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, address.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)) }
+                val target = previewUrl(address)?.toString()
+                if (target == null) store.say("Only HTTPS previews can be opened.")
+                else runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, target.toUri())) }
             }) { Icon(Icons.AutoMirrored.Outlined.OpenInNew, "Open in the browser", tint = p.muted) }
         }
         AndroidView({ browser.view }, Modifier.weight(1f).fillMaxWidth())
@@ -72,7 +85,11 @@ fun PreviewScreen(store: Store, url: String) {
  * scripts on, since the served app is a web app, and content and file URLs off, since nothing on the device is its business.
  */
 @SuppressLint("SetJavaScriptEnabled")
-private class PreviewBrowser(context: Context, onPage: (address: String, canGoBack: Boolean) -> Unit) {
+private class PreviewBrowser(
+    private val context: Context, initialUrl: String, private val onBlocked: (String) -> Unit,
+    onPage: (address: String, canGoBack: Boolean) -> Unit,
+) {
+    private val origin = PreviewOrigin(initialUrl)
     var access: PreviewAccess? = null
     private val web: WebView
 
@@ -81,6 +98,8 @@ private class PreviewBrowser(context: Context, onPage: (address: String, canGoBa
         val settings = created.settings
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
+        settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+        settings.safeBrowsingEnabled = true
         settings.allowContentAccess = false
         settings.allowFileAccess = false
         created.webViewClient = object : WebViewClient() {
@@ -88,13 +107,23 @@ private class PreviewBrowser(context: Context, onPage: (address: String, canGoBa
             // started again with them.
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 if (!request.isForMainFrame) return false
-                val headers = access?.headersFor(request.url.toString()).orEmpty()
+                val target = previewUrl(request.url.toString())?.toString()
+                if (target == null) { onBlocked("Only HTTPS previews can be opened."); return true }
+                if (!origin.contains(target)) {
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, target.toUri())) }
+                        .onFailure { onBlocked("No browser can open that link.") }
+                    return true
+                }
+                val headers = access?.headersFor(target).orEmpty()
                 if (headers.isEmpty()) return false
-                view.loadUrl(request.url.toString(), headers)
+                view.loadUrl(target, headers)
                 return true
             }
 
-            override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) = onPage(url, view.canGoBack())
+            override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                if (!origin.contains(url)) { view.stopLoading(); onBlocked("This address is outside the preview."); return }
+                onPage(url, view.canGoBack())
+            }
 
             override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) = onPage(url, view.canGoBack())
         }
@@ -103,7 +132,18 @@ private class PreviewBrowser(context: Context, onPage: (address: String, canGoBa
 
     val view: View get() = web
 
-    fun load(target: String) = web.loadUrl(target, access?.headersFor(target).orEmpty())
+    fun load(target: String) {
+        val normalized = previewUrl(target)?.toString()
+        if (normalized == null || !origin.contains(normalized)) { onBlocked("Only HTTPS previews can be opened."); return }
+        web.loadUrl(normalized, access?.headersFor(normalized).orEmpty())
+    }
+
+    fun close() {
+        access = null
+        web.stopLoading()
+        web.clearCache(true)
+        web.destroy()
+    }
 
     fun reload(fallback: String) = load(web.url ?: fallback)
 

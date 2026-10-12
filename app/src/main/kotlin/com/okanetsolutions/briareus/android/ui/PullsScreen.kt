@@ -88,7 +88,6 @@ private const val BOARD_POLL_MS = 60_000L
 @Composable
 fun PullsScreen(store: Store, repo: String, onPane: (Pane?) -> Unit, back: (() -> Unit)?) {
     val p = LocalPalette.current
-    val scope = rememberCoroutineScope()
     val sessions by store.sessions.collectAsState()
     var board by remember(repo) { mutableStateOf<Board?>(null) }
     var errands by remember { mutableStateOf<List<Errand>>(emptyList()) }
