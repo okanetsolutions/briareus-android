@@ -8,6 +8,7 @@ test -s "$apk"
 test -s "$bundle"
 "$tools/apksigner" verify --verbose --print-certs "$apk"
 "$tools/zipalign" -c -P 16 -v 4 "$apk"
+python3 scripts/ci/check-native-alignment.py "$apk"
 LC_ALL=C jarsigner -verify "$bundle" | tee "$RUNNER_TEMP/bundle-signature.txt"
 grep -q 'jar verified.' "$RUNNER_TEMP/bundle-signature.txt"
 test "$("$analyzer" manifest application-id "$apk")" = 'com.okanetsolutions.briareus.android'

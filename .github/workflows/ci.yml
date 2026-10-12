@@ -41,7 +41,7 @@ jobs:
         run: scripts/ci/prepare-signing.sh
       - name: Test, coverage, static analysis and debug/release APK/AAB builds
         run: ./gradlew check lintRelease assembleDebug assembleDebugAndroidTest assembleRelease bundleRelease -Pwerror --console=plain
-      - name: Verify release signatures, manifest and 16 KB ZIP alignment
+      - name: Verify release signatures, manifest and 16 KB ZIP/ELF alignment
         run: scripts/ci/verify-release.sh
       - name: Summarise core tests and coverage
         if: always()
@@ -88,11 +88,11 @@ jobs:
             ram: 2048M
           - device: tablet-api35
             api: '35'
-            target: google_apis_ps16k
+            target: google_apis
             size: 1920x1200
             density: 160
             wide: 'true'
-            page_size: 16384
+            page_size: 4096
             ram: 4096M
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
