@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+  <!-- The voice conversation runs the microphone and speaker as a call, for the echo canceller. -->
+  <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+  <!-- Voice input is optional; keyboard and touch work without a microphone. -->
+  <uses-feature android:name="android.hardware.microphone" android:required="false" />
+  <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+  <application
+    android:name=".BriareusApp"
+    android:allowBackup="false"
+    android:dataExtractionRules="@xml/data_extraction_rules"
+    android:fullBackupContent="false"
+    android:icon="@drawable/ic_launcher"
+    android:label="@string/app_name"
+    android:networkSecurityConfig="@xml/network_security_config"
+    android:supportsRtl="true"
+    android:theme="@style/Theme.Briareus">
+
+
+    <!-- The main window: the projects and conversations beside the chosen conversation, wide like the dashboard. -->
+    <activity
+      android:name=".MainActivity"
+      android:exported="true"
+      android:launchMode="singleTask"
+      android:resizeableActivity="true"
+      android:windowSoftInputMode="adjustResize">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+
+    <!-- One conversation in a window of its own, placed beside the others; one task per conversation. -->
+    <activity
+      android:name=".ConversationActivity"
+      android:documentLaunchMode="intoExisting"
+      android:exported="false"
+      android:resizeableActivity="true"
+      android:taskAffinity=""
+      android:windowSoftInputMode="adjustResize">
+    </activity>
+
+    <!-- The status panel: a narrow window to keep in the corner of your eye next to a video. -->
+    <activity
+      android:name=".StatusActivity"
+      android:exported="false"
+      android:launchMode="singleTask"
+      android:resizeableActivity="true"
+      android:taskAffinity="com.okanetsolutions.briareus.android.status">
+    </activity>
+
+    <!-- The voice panel: talk to GPT-Realtime about your projects, and have the other windows follow. -->
+    <activity
+      android:name=".VoiceActivity"
+      android:exported="false"
+      android:launchMode="singleTask"
+      android:resizeableActivity="true"
+      android:taskAffinity="com.okanetsolutions.briareus.android.voice">
+    </activity>
+
+    <!-- ▶ Run's preview: the served app in a browser of the app's own, which carries the preview service token. -->
+    <activity
+      android:name=".PreviewActivity"
+      android:exported="false"
+      android:launchMode="singleTask"
+      android:resizeableActivity="true"
+      android:taskAffinity="com.okanetsolutions.briareus.android.preview"
+      android:windowSoftInputMode="adjustResize">
+    </activity>
+
+    <!-- Keeps the microphone open while a voice conversation goes on and you look at another app. -->
+    <service
+      android:name=".VoiceService"
+      android:exported="false"
+      android:foregroundServiceType="microphone" />
+
+    <!-- Keeps GET /events open while you are in other apps, and notifies when a session needs you. -->
+    <service
+      android:name=".EventsService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
+
+    <receiver android:name=".ReplyReceiver" android:exported="false" />
+  </application>
+</manifest>

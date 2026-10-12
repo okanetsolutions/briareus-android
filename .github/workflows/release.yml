@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    permissions:
+      contents: write
+      security-events: write
+      actions: read
+    uses: ./.github/workflows/ci.yml
+
+  package:
+    name: Sign and prepare draft release
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Require a version tag on main
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          git merge-base --is-ancestor HEAD origin/main
+          echo "RELEASE_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
+          echo "RELEASE_CODE=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+      - run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - name: Require production signing credentials
+        env:
+          KEYSTORE_BASE64: ${{ secrets.BRIAREUS_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.BRIAREUS_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.BRIAREUS_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.BRIAREUS_KEY_PASSWORD }}
+        run: |
+          if [[ -z "$KEYSTORE_BASE64" || -z "$STORE_PASSWORD" || -z "$KEY_ALIAS" || -z "$KEY_PASSWORD" ]]; then
+            echo 'Configure all four BRIAREUS signing secrets before releasing.' >&2
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release-signing.p12"
+          chmod 600 "$RUNNER_TEMP/release-signing.p12"
+      - name: Build production-signed APK and AAB
+        env:
+          BRIAREUS_KEYSTORE: ${{ runner.temp }}/release-signing.p12
+          BRIAREUS_KEYSTORE_PASSWORD: ${{ secrets.BRIAREUS_KEYSTORE_PASSWORD }}
+          BRIAREUS_KEY_ALIAS: ${{ secrets.BRIAREUS_KEY_ALIAS }}
+          BRIAREUS_KEY_PASSWORD: ${{ secrets.BRIAREUS_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease bundleRelease -Pwerror -PversionName="$RELEASE_VERSION" -PversionCode="$RELEASE_CODE" --console=plain
+      - name: Verify release packages
+        run: scripts/ci/verify-release.sh
+      - name: Prepare draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "Briareus Android $RELEASE_TAG" --generate-notes
+          fi
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = 'true'
+          gh release upload "$RELEASE_TAG" --clobber \
+            app/build/outputs/apk/release/app-release.apk \
+            app/build/outputs/bundle/release/app-release.aab \
+            app/build/outputs/mapping/release/mapping.txt \
+            app/build/release-checks/SHA256SUMS
+      - name: Remove production signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release-signing.p12"
