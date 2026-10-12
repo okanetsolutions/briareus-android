@@ -2,7 +2,7 @@
 
 Native Kotlin and Jetpack Compose for phones and tablets. `core/` is Android-free; `app/` owns Android storage, lifecycle and UI. Read `docs/features.md` before claiming parity with another client.
 
-- Run `./gradlew check assembleDebug assembleRelease -Pwerror` and `python3 scripts/sync-contracts.py`.
+- Run `./gradlew check lintRelease assembleDebug assembleDebugAndroidTest assembleRelease bundleRelease -Pwerror` and `python3 scripts/sync-contracts.py`.
 - Keep server routes in `core/Routes.kt`; compare changes against the server API and pinned Swift reference.
 - Enforce server capability and token permissions before mutations, including notification and voice actions.
 - Require HTTPS, reject redirects, and never automatically retry writes.

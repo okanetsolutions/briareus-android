@@ -1,22 +1,26 @@
-name: CI
+name: Android CI
 
 on:
   push:
-    branches: [main, "port/**"]
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
-# A new push to a pull request cancels its older runs; runs on main always finish.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: android-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
-    name: Build, test and lint
+    name: Build, test, lint and release signing
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # Submit the resolved Gradle dependency graph for review.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
@@ -25,37 +29,135 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+      - run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          dependency-graph: generate-and-submit
+          dependency-graph-continue-on-failure: false
       - name: Verify pinned design contracts
         run: python3 scripts/sync-contracts.py
-      - name: Core tests, detekt, app lint and both builds, warnings as errors
-        run: ./gradlew check assembleDebug assembleRelease -Pwerror --console=plain
-      - name: Summarise the core tests
+      - name: Create disposable CI signing key
+        run: scripts/ci/prepare-signing.sh
+      - name: Test, coverage, static analysis and debug/release APK/AAB builds
+        run: ./gradlew check lintRelease assembleDebug assembleDebugAndroidTest assembleRelease bundleRelease -Pwerror --console=plain
+      - name: Verify release signatures, manifest and 16 KB ZIP alignment
+        run: scripts/ci/verify-release.sh
+      - name: Summarise core tests and coverage
         if: always()
-        run: |
-          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
-          import glob, re
-          total = failed = 0
-          for f in glob.glob('core/build/test-results/test/*.xml'):
-              m = re.search(r'tests="(\d+)".*?failures="(\d+)" errors="(\d+)"', open(f).read())
-              total += int(m[1]); failed += int(m[2]) + int(m[3])
-          print(f"### Core tests\n{total - failed} of {total} passed")
-          PY
+        run: python3 scripts/ci/test-summary.py
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: Briareus-android-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: Android-packages-ci-only
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/bundle/release/app-release.aab
+            app/build/outputs/mapping/release/mapping.txt
+            app/build/release-checks/SHA256SUMS
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: reports
+          name: build-reports
           path: |
             app/build/reports/
             core/build/reports/
+            core/build/test-results/
+      - name: Remove disposable signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/briareus-ci-signing.p12"
+
+  devices:
+    name: Device tests (${{ matrix.device }})
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - device: phone-api31
+            api: '31'
+            target: google_apis
+            size: 1080x1920
+            density: 420
+            wide: 'false'
+          - device: tablet-api37
+            api: '37.0'
+            target: google_apis_ps16k
+            size: 1920x1200
+            density: 160
+            wide: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: Android-packages-ci-only
+          path: app/build
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Native instrumentation and minified release startup
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          EXPECTED_WIDE: ${{ matrix.wide }}
+          DEVICE_SIZE: ${{ matrix.size }}
+          DEVICE_DENSITY: ${{ matrix.density }}
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: ${{ matrix.target }}
+          ram-size: 2048M
+          disable-animations: true
+          disable-spellchecker: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: scripts/ci/device-tests.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: device-reports-${{ matrix.device }}
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+            release-start.txt
+            release-window.xml
+            release-logcat.txt
+
+  dependencies:
+    name: Dependency vulnerability review
+    needs: build
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 120
+
+  codeql:
+    name: Security analysis
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    uses: ./.github/workflows/codeql.yml
 
   editorconfig:
     name: Formatting (.editorconfig)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: editorconfig-checker/action-editorconfig-checker@51f63319f592f97930c73d9c46184d20bd206393 # v3.0.0
@@ -64,9 +166,32 @@ jobs:
   workflows:
     name: Workflow files (actionlint)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: actionlint
         run: |
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
           ./actionlint -color
+
+  android:
+    name: Android checks
+    if: always()
+    needs: [build, devices, dependencies, codeql, editorconfig, workflows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every check
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          IS_PR: ${{ github.event_name == 'pull_request' }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          for name, job in results.items():
+              allowed = ['success']
+              if name == 'dependencies' and os.environ['IS_PR'] != 'true':
+                  allowed.append('skipped')
+              assert job['result'] in allowed, f"{name}: {job['result']}"
+          PY

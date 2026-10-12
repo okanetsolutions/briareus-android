@@ -11,6 +11,7 @@ android {
         applicationId = "com.okanetsolutions.briareus.android"
         // Android 12 and later on phones and tablets.
         minSdk = 31
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         targetSdk = 37
         versionCode = providers.gradleProperty("versionCode").map(String::toInt).getOrElse(1)
         versionName = providers.gradleProperty("versionName").getOrElse("0.1.0")
@@ -43,7 +44,9 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
+    testOptions { animationsDisabled = true }
     lint {
+        checkReleaseBuilds = true
         abortOnError = true
         warningsAsErrors = true
         // Dependency versions are reviewed in the version catalog.
@@ -73,6 +76,11 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
     testImplementation(libs.junit)
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
+    debugImplementation(libs.compose.ui.test.manifest)
     // The lint tool AGP runs resolves its own old copies of these; the same patched versions as the plugin classpath.
     constraints {
         add("androidLintTool", libs.bouncycastle.bcprov)

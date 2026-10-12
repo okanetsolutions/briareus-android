@@ -28,7 +28,7 @@ python3 scripts/sync-contracts.py
 
 The debug APK is `app/build/outputs/apk/debug/app-debug.apk`. Release builds are unsigned unless you supply your own signing configuration. See [build instructions](docs/build.md).
 
-CI runs the same tests, lint, static analysis and builds. No production token is needed. These checks do not establish that the app works on a physical phone or tablet; device and live-server acceptance remains required before distribution.
+CI also runs phone/tablet emulator tests, coverage gates, dependency review, CodeQL and signed release-package verification. Version tags on `main` run those checks before preparing a production-signed draft release. See [CI and release delivery](docs/ci.md) for the required signing secrets and checks. Physical-device and live-server acceptance remains required before distribution.
 
 ## Security
 

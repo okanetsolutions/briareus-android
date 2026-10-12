@@ -19,7 +19,7 @@ Set these environment variables before `./gradlew assembleRelease`:
 - `BRIAREUS_KEY_ALIAS`: signing alias.
 - `BRIAREUS_KEY_PASSWORD`: key password.
 
-Pass `-PversionCode=2 -PversionName=0.2.0` to set release versions. Keep the keystore outside the repository. Without these variables the release APK is unsigned. No Play Store publication or production signing is configured.
+Pass `-PversionCode=2 -PversionName=0.2.0` to set release versions. Keep the keystore outside the repository. Without these variables the release APK is unsigned. The [release workflow](ci.md) uses repository signing secrets to prepare draft GitHub releases; no Google Play publication is configured.
 
 ## Update shared contracts
 
