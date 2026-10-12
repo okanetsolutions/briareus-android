@@ -15,4 +15,8 @@ test "$("$analyzer" manifest min-sdk "$apk")" = '31'
 test "$("$analyzer" manifest target-sdk "$apk")" = '37'
 test "$("$analyzer" manifest debuggable "$apk")" = 'false'
 mkdir -p app/build/release-checks
-sha256sum "$apk" "$bundle" > app/build/release-checks/SHA256SUMS
+{
+  (cd app/build/outputs/apk/release && sha256sum app-release.apk)
+  (cd app/build/outputs/bundle/release && sha256sum app-release.aab)
+  (cd app/build/outputs/mapping/release && sha256sum mapping.txt)
+} > app/build/release-checks/SHA256SUMS

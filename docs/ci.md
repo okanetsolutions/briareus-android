@@ -15,7 +15,7 @@ Every pull request and push to `main` runs `Android CI`. `Android checks` passes
 
 Core coverage must remain at least 90% of lines and 65% of branches. These floors start just below the existing suite's measured coverage; they apply to all core classes, without excluding difficult classes to raise the result. Android instrumented tests are separate and are not counted in the JVM coverage report.
 
-The phone runs API 31, the oldest supported Android version. The tablet runs API 37, the app's target SDK. The jobs set window sizes explicitly and assert that they actually exercise the intended compact/wide layout. After instrumentation, each emulator installs and opens the minified release APK, catching startup problems that a debug-only test would miss.
+The phone runs API 31, the oldest supported Android version. The tablet runs API 37, the app's target SDK. The jobs set window sizes explicitly and assert that they actually exercise the intended compact/wide layout. The job also checks the runner exit-code file and requires four passing tests, so an installation failure cannot appear as a successful empty run. After instrumentation, each emulator installs and opens the minified release APK, catching startup problems that a debug-only test would miss.
 
 The workflow uploads APKs, the AAB, R8 mapping, package hashes, test/lint/coverage reports and emulator failure evidence. `Android-packages-ci-only` uses a disposable key and is for testing only; it is not an upgrade channel. Dependabot checks Gradle dependencies and GitHub Actions weekly. CodeQL also runs weekly.
 
