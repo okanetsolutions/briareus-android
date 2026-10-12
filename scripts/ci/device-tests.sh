@@ -3,6 +3,8 @@ set -euo pipefail
 : "${EXPECTED_WIDE:?}"
 : "${DEVICE_SIZE:?}"
 : "${DEVICE_DENSITY:?}"
+: "${EXPECTED_PAGE_SIZE:?}"
+test "$(adb shell getconf PAGE_SIZE | tr -d '\r')" = "$EXPECTED_PAGE_SIZE"
 adb shell wm size "$DEVICE_SIZE"
 adb shell wm density "$DEVICE_DENSITY"
 ./gradlew connectedDebugAndroidTest -Pwerror --console=plain \

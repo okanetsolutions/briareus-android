@@ -13,3 +13,5 @@ captures/
 .env.*
 .DS_Store
 .claude/settings.local.json
+*.p12
+__pycache__/

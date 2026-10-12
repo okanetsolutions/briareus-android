@@ -83,12 +83,14 @@ jobs:
             size: 1080x1920
             density: 420
             wide: 'false'
+            page_size: 4096
           - device: tablet-api37
             api: '37.0'
             target: google_apis_ps16k
             size: 1920x1200
             density: 160
             wide: 'true'
+            page_size: 16384
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
@@ -112,6 +114,7 @@ jobs:
           EXPECTED_WIDE: ${{ matrix.wide }}
           DEVICE_SIZE: ${{ matrix.size }}
           DEVICE_DENSITY: ${{ matrix.density }}
+          EXPECTED_PAGE_SIZE: ${{ matrix.page_size }}
         with:
           api-level: ${{ matrix.api }}
           arch: x86_64
@@ -173,6 +176,8 @@ jobs:
         run: |
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
           ./actionlint -color
+          shellcheck scripts/ci/*.sh
+          python3 -m py_compile scripts/ci/*.py scripts/sync-contracts.py
 
   android:
     name: Android checks

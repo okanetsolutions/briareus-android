@@ -8,7 +8,7 @@
 
 The application ID is `com.okanetsolutions.briareus.android`; it can be installed alongside the Quest client.
 
-On ARM64 Linux, Google's SDK native tools need an ARM64-compatible `aapt2`. Set `android.aapt2FromMavenOverride=/absolute/path/to/aapt2` in your own `~/.gradle/gradle.properties`. Do not commit that machine-specific path.
+On ARM64 Linux, Google's SDK native tools need an ARM64-compatible `aapt2`. Set `android.aapt2FromMavenOverride=/absolute/path/to/aapt2` in your own `~/.gradle/gradle.properties`. Do not commit that machine-specific path. Some older ARM replacements can report a successful release build without packaging its manifest; CI uses the official SDK and verifies the actual APK signature, manifest and startup. Prefer the CI packages if the local SDK cannot pass those checks.
 
 ## Sign a release
 
