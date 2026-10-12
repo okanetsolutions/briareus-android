@@ -78,6 +78,8 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test)
+    // Compose allows Espresso 3.5, whose reflected InputManager API no longer exists on newer Android.
+    androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.junit)
     debugImplementation(libs.compose.ui.test.manifest)
