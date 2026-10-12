@@ -46,7 +46,7 @@ jobs:
       - name: Summarise core tests and coverage
         if: always()
         run: python3 scripts/ci/test-summary.py
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Android-packages-ci-only
           if-no-files-found: error
@@ -57,7 +57,7 @@ jobs:
             app/build/outputs/bundle/release/app-release.aab
             app/build/outputs/mapping/release/mapping.txt
             app/build/release-checks/SHA256SUMS
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: build-reports
@@ -130,7 +130,7 @@ jobs:
           disable-spellchecker: true
           emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim
           script: scripts/ci/device-tests.sh
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: device-reports-${{ matrix.device }}
