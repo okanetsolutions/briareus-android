@@ -37,4 +37,12 @@ class StatusRefreshTest {
         // The sessions were dropped for a new or changed connection meanwhile.
         assertNull(StatusRefresh.failure(mark(1, 3), mark(2, 0)))
     }
+
+    @Test fun onlyTheLatestRunOnTheCurrentClientReports() {
+        assertTrue(StatusRefresh.speaks(run = 2, latest = 2, sameClient = true))
+        // Superseded by a newer refresh of the tab.
+        assertFalse(StatusRefresh.speaks(run = 1, latest = 2, sameClient = true))
+        // Its client was retired: forgotten, paired again or replaced after an access change.
+        assertFalse(StatusRefresh.speaks(run = 2, latest = 2, sameClient = false))
+    }
 }

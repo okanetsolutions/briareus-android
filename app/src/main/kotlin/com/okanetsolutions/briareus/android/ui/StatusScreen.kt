@@ -61,13 +61,20 @@ fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> U
     var latest by remember { mutableIntStateOf(0) }
     suspend fun refresh() {
         val run = ++latest
+        val client = store.client
         refreshing = true
         failure = null
         fun mark() = StatusRefresh.Mark(store.epoch.value, store.refreshed.value)
         val before = mark()
         try { store.refresh() }
         catch (e: CancellationException) { throw e }
-        catch (e: Exception) { if (run == latest) failure = StatusRefresh.failure(before, mark()); store.failed(e) }
+        catch (e: Exception) {
+            // A superseded run, or one whose client was retired, reports nothing: a 401 there would forget the new connection.
+            if (StatusRefresh.speaks(run, latest, store.client === client)) {
+                failure = StatusRefresh.failure(before, mark())
+                store.failed(e)
+            }
+        }
         finally { if (run == latest) refreshing = false }
     }
     if (refreshes) LaunchedEffect(connection?.address, epoch) { refresh() }
@@ -176,6 +183,12 @@ internal object StatusRefresh {
      * event stream's on reconnect, say) succeeded or the sessions were dropped while it ran, so it says nothing of now.
      */
     fun failure(before: Mark, now: Mark): Mark? = before.takeIf { it == now }
+
+    /**
+     * Whether a failed refresh may report: only the tab's latest run, and only while the client it ran on is still
+     * the store's, as the store's own callers check.
+     */
+    fun speaks(run: Int, latest: Int, sameClient: Boolean): Boolean = run == latest && sameClient
 
     /** The warning stands until a refresh succeeds or the connection's sessions are dropped; upserts do not touch it. */
     fun stillFailed(failure: Mark?, now: Mark): Boolean = failure == now
