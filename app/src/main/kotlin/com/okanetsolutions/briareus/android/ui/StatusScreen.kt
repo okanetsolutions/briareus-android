@@ -55,7 +55,7 @@ fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> U
     var refreshing by remember { mutableStateOf(refreshes) }
     // A failure belongs to its connection: the refresh count restarts and the empty list looks the same on the next one.
     var failedOn by remember(connection?.address, connection?.device) { mutableStateOf<StatusRefresh.Failure?>(null) }
-    val failed = StatusRefresh.stillFailed(failedOn, sessions, refreshed)
+    val failed = StatusRefresh.stillFailed(failedOn, sessions, refreshed, sessionsKnown)
     suspend fun refresh() {
         refreshing = true
         failedOn = null
@@ -70,7 +70,7 @@ fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> U
     val counts = SessionList.counts(all)
     val waiting = SessionList.needingYou(all)
     val working = all.filter { it.isActive && it.parentId == null }.sortedBy { it.title }
-    val unknown = refreshes && StatusRefresh.nothingLoaded(sessions, sessionsKnown)
+    val unknown = refreshes && StatusRefresh.nothingLoaded(sessionsKnown)
 
     LazyColumn(Modifier.fillMaxSize().background(p.canvas), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
@@ -175,13 +175,17 @@ internal object StatusRefresh {
      */
     fun failure(sessions: Map<String, Session>, before: Long, now: Long): Failure? = if (now == before) Failure(sessions, before) else null
 
-    /** Whether the warning still describes the screen: no refresh has succeeded since, and no live event changed the sessions. */
-    fun stillFailed(failure: Failure?, sessions: Map<String, Session>, refreshed: Long): Boolean =
-        failure != null && failure.sessions === sessions && failure.refreshed == refreshed
+    /**
+     * Whether the warning still describes the screen: no refresh has succeeded since and, once the list is [known], no
+     * live event changed the sessions. Before then the sessions on hand are only the few this device upserted (a
+     * followed conversation, one it started), so they leave a failed first load unresolved.
+     */
+    fun stillFailed(failure: Failure?, sessions: Map<String, Session>, refreshed: Long, known: Boolean): Boolean =
+        failure != null && failure.refreshed == refreshed && (!known || failure.sessions === sessions)
 
     /**
-     * No list of this connection's sessions yet, neither saved nor refreshed: zero counts and "all quiet" would be
-     * guesses. A known empty list is not.
+     * No list of this connection's sessions yet, neither saved nor refreshed: counts and "all quiet" would be guesses,
+     * even with a few upserted sessions on hand. A known list, even an empty one, is not.
      */
-    fun nothingLoaded(sessions: Map<String, Session>, known: Boolean): Boolean = sessions.isEmpty() && !known
+    fun nothingLoaded(known: Boolean): Boolean = !known
 }

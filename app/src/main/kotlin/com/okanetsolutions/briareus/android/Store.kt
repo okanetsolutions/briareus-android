@@ -275,8 +275,11 @@ class Store(context: Context) {
     private var saveJob: Job? = null
     private fun saveSessions() {
         saveJob?.cancel()
+        // Until a list is known the map holds only upserted sessions; saved, it would be restored as the whole list.
+        if (!_sessionsKnown.value) return
         saveJob = scope.launch {
             delay(2_000)
+            if (!_sessionsKnown.value) return@launch
             cache.write("sessions", JsonObject(mapOf("sessions" to JsonArray(_sessions.value.values.map { it.raw }))))
         }
     }
