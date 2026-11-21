@@ -20,7 +20,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,7 +44,7 @@ import com.okanetsolutions.briareus.android.Store
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-/** The dashboard's "Welcome back" composer: a project, a branch, a runtime, the review loop, and the first message. */
+/** The dashboard's "Welcome back" composer: a project, a branch, a runtime, and the first message. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NewSessionScreen(store: Store, initialRepo: String?, initialPrompt: String? = null, onStarted: (String) -> Unit) {
@@ -60,7 +59,6 @@ fun NewSessionScreen(store: Store, initialRepo: String?, initialPrompt: String? 
     var choice by remember { mutableStateOf<RuntimeChoice?>(null) }
     var branches by remember { mutableStateOf<Pair<String?, List<String>>>(null to emptyList()) }
     var branch by remember { mutableStateOf<String?>(null) }
-    var reviewLoop by rememberSaveable { mutableStateOf(false) }
     var starting by remember { mutableStateOf(false) }
     var uncertain by rememberSaveable { mutableStateOf(store.cache.read("pending-start") != null) }
     var refreshing by remember { mutableStateOf(false) }
@@ -105,7 +103,6 @@ fun NewSessionScreen(store: Store, initialRepo: String?, initialPrompt: String? 
                         if (efforts.isNotEmpty()) Picker("Effort", current.effort ?: "Default", efforts.map { it to it }) { choice = current.copy(effort = it) }
                     }
                 }
-                FilterChip(selected = reviewLoop, onClick = { reviewLoop = !reviewLoop }, label = { Text("Review loop") })
             }
             if (uncertain) {
                 Text("The last request may have started a paid session. Refresh and check existing conversations before starting again. Your prompt is kept.", color = p.warn)
@@ -149,7 +146,7 @@ fun NewSessionScreen(store: Store, initialRepo: String?, initialPrompt: String? 
                             val result = client.call(
                                 "start_session",
                                 args(
-                                    "repo" to repo, "prompt" to prompt.trim(), "branch" to branch, "reviewLoop" to reviewLoop.takeIf { it },
+                                    "repo" to repo, "prompt" to prompt.trim(), "branch" to branch,
                                     *choice?.arguments()?.toList()?.toTypedArray().orEmpty(),
                                 ),
                             )

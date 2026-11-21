@@ -110,9 +110,9 @@ class Navigator(context: Context, private val store: Store) {
                 "What \"${title(action.sessionId)}\" serves is open in the preview panel."
             }
             ScreenAction.StatusPanel -> {
-                tab.value = "Findings"
+                tab.value = "Status"
                 bringMain()
-                "Findings is open."
+                "The status panel is open."
             }
             ScreenAction.Home -> {
                 open(null)

@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
@@ -35,17 +35,17 @@ fun AndroidShell(
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
             when (tab) {
-                "Findings" -> FindingsScreen(store) { navigator.open(Pane.Open(it)) }
+                "Status" -> StatusScreen(store) { navigator.open(Pane.Open(it)) }
                 "Usage" -> UsageScreen(store, onBack = null)
                 "Settings" -> SettingsScreen(store, notificationsEnabled, onBackgroundAlerts)
                 else -> HomeScreen(
                     store, pane, navigator::open, { navigator.open(Pane.Open(it)) },
-                    { navigator.tab.value = "Findings" }, voiceOn, onVoice, navigator::back, screenState,
+                    { navigator.tab.value = "Status" }, voiceOn, onVoice, navigator::back, screenState,
                 )
             }
         }
         NavigationBar {
-            listOf("Projects" to Icons.Outlined.Folder, "Findings" to Icons.Outlined.Flag, "Usage" to Icons.Outlined.BarChart, "Settings" to Icons.Outlined.Settings)
+            listOf("Projects" to Icons.Outlined.Folder, "Status" to Icons.Outlined.Dashboard, "Usage" to Icons.Outlined.BarChart, "Settings" to Icons.Outlined.Settings)
                 .forEach { (label, icon) ->
                     NavigationBarItem(selected = tab == label, onClick = { navigator.tab.value = label }, icon = { Icon(icon, null) }, label = { Text(label) })
                 }
