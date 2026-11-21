@@ -83,7 +83,7 @@ fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> U
         if (failed) {
             item { Text(if (unknown) "Could not load the conversations." else "Could not refresh the conversations. Showing the last loaded status.", color = p.warn) }
         }
-        if (!unknown || !(failed || refreshing)) item {
+        if (!unknown) item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Count("Need you", counts.needsYou, p.accent, Modifier.weight(1f))
                 Count("Working", counts.working, p.warn, Modifier.weight(1f))
@@ -108,7 +108,7 @@ fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> U
         if (waiting.isEmpty() && working.isEmpty()) {
             when {
                 unknown && refreshing -> item { Text("Loading conversations…", color = p.muted) }
-                unknown && failed -> Unit
+                unknown -> Unit
                 else -> item { Text("All quiet. Nothing is running and nothing waits for you.", color = p.muted) }
             }
         }
