@@ -52,16 +52,15 @@ fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> U
     val refreshed by store.refreshed.collectAsState()
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(refreshes) }
-    // What was on screen when the last refresh failed: the sessions and how many refreshes had succeeded. A later
-    // successful refresh, anywhere in the app, or a live event that changes the sessions puts the warning out of date.
-    var failedOn by remember { mutableStateOf<Pair<Map<String, Session>, Long>?>(null) }
-    val failed = failedOn?.let { (seen, count) -> seen === sessions && count == refreshed } == true
+    var failedOn by remember { mutableStateOf<StatusRefresh.Failure?>(null) }
+    val failed = StatusRefresh.stillFailed(failedOn, sessions, refreshed)
     suspend fun refresh() {
         refreshing = true
         failedOn = null
+        val before = store.refreshed.value
         try { store.refresh() }
         catch (e: CancellationException) { throw e }
-        catch (e: Exception) { failedOn = store.sessions.value to store.refreshed.value; store.failed(e) }
+        catch (e: Exception) { failedOn = StatusRefresh.failure(store.sessions.value, before, store.refreshed.value); store.failed(e) }
         finally { refreshing = false }
     }
     if (refreshes) LaunchedEffect(connection?.address) { refresh() }
@@ -69,8 +68,7 @@ fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> U
     val counts = SessionList.counts(all)
     val waiting = SessionList.needingYou(all)
     val working = all.filter { it.isActive && it.parentId == null }.sortedBy { it.title }
-    // With nothing loaded yet, zero counts and "all quiet" would be guesses.
-    val unknown = refreshes && sessions.isEmpty()
+    val unknown = refreshes && StatusRefresh.nothingLoaded(sessions, refreshed)
 
     LazyColumn(Modifier.fillMaxSize().background(p.canvas), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
@@ -162,4 +160,23 @@ private fun WaitingCard(store: Store, s: Session, onOpen: (String) -> Unit) {
             }
         }
     }
+}
+
+/** When the Status tab's refresh warning applies, and when it has nothing to show yet. Pure, so it is tested on the JVM. */
+internal object StatusRefresh {
+    /** What was on screen when a refresh failed: the sessions, and how many refreshes had succeeded. */
+    class Failure(val sessions: Map<String, Session>, val refreshed: Long)
+
+    /**
+     * The failure to warn about, or null when another refresh (the event stream's on reconnect, say) succeeded while
+     * this one ran, so the screen is current.
+     */
+    fun failure(sessions: Map<String, Session>, before: Long, now: Long): Failure? = if (now == before) Failure(sessions, before) else null
+
+    /** Whether the warning still describes the screen: no refresh has succeeded since, and no live event changed the sessions. */
+    fun stillFailed(failure: Failure?, sessions: Map<String, Session>, refreshed: Long): Boolean =
+        failure != null && failure.sessions === sessions && failure.refreshed == refreshed
+
+    /** Nothing cached and no refresh succeeded yet: zero counts and "all quiet" would be guesses. A loaded empty list is not. */
+    fun nothingLoaded(sessions: Map<String, Session>, refreshed: Long): Boolean = sessions.isEmpty() && refreshed == 0L
 }
