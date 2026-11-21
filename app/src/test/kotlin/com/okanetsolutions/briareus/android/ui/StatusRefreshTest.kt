@@ -25,9 +25,17 @@ class StatusRefreshTest {
         assertNull(StatusRefresh.failure(loaded, before = 3, now = 4))
     }
 
-    @Test fun anEmptyListIsLoadedOnceARefreshSucceeded() {
-        assertTrue(StatusRefresh.nothingLoaded(emptyMap(), refreshed = 0))
-        assertFalse(StatusRefresh.nothingLoaded(emptyMap(), refreshed = 1))
-        assertFalse(StatusRefresh.nothingLoaded(loaded, refreshed = 0))
+    @Test fun anEmptyListIsLoadedOnceItIsKnown() {
+        // A new or changed connection: nothing saved or refreshed yet.
+        assertTrue(StatusRefresh.nothingLoaded(emptyMap(), known = false))
+        // A saved or refreshed empty list means there are no conversations.
+        assertFalse(StatusRefresh.nothingLoaded(emptyMap(), known = true))
+        assertFalse(StatusRefresh.nothingLoaded(loaded, known = false))
+    }
+
+    @Test fun aFirstRefreshThatFailsWarnsUntilOneSucceeds() {
+        val failure = StatusRefresh.failure(emptyMap(), before = 0, now = 0)
+        assertTrue(StatusRefresh.stillFailed(failure, emptyMap(), refreshed = 0))
+        assertFalse(StatusRefresh.stillFailed(failure, emptyMap(), refreshed = 1))
     }
 }

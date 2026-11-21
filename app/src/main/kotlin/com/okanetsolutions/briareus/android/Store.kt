@@ -59,10 +59,18 @@ class Store(context: Context) {
     private val _refreshed = MutableStateFlow(0L)
 
     /**
-     * How many refreshes have succeeded. A screen that saw one fail learns from it that a later one replaced what it
-     * warned about, even when the lists came back equal and [sessions] did not change.
+     * How many refreshes have succeeded on this connection. A screen that saw one fail learns from it that a later one
+     * replaced what it warned about, even when the lists came back equal and [sessions] did not change.
      */
     val refreshed: StateFlow<Long> = _refreshed.asStateFlow()
+
+    private val _sessionsKnown = MutableStateFlow(false)
+
+    /**
+     * Whether [sessions] holds this connection's list, from the saved copy or a refresh, so an empty one means there
+     * are no conversations rather than none read yet.
+     */
+    val sessionsKnown: StateFlow<Boolean> = _sessionsKnown.asStateFlow()
 
     enum class Link { OFFLINE, CONNECTING, LIVE }
     private val _link = MutableStateFlow(Link.OFFLINE)
@@ -100,7 +108,10 @@ class Store(context: Context) {
         client = runCatching { ApiClient(connection.address, token) }.getOrNull() ?: return
         _connection.value = connection
         (cache.read("projects") as? JsonObject)?.let { _projects.value = Project.list(it) }
-        (cache.read("sessions") as? JsonObject)?.let { saved -> _sessions.value = Session.list(saved).associateBy { it.id } }
+        (cache.read("sessions") as? JsonObject)?.let { saved ->
+            _sessions.value = Session.list(saved).associateBy { it.id }
+            _sessionsKnown.value = true
+        }
         // The route catalog is read again on every launch, so a server update shows up without pairing again.
         val restoredClient = client
         scope.launch {
@@ -124,7 +135,7 @@ class Store(context: Context) {
             conversations.values.forEach { it.close() }
             conversations.clear()
             _projects.value = emptyList()
-            _sessions.value = emptyMap()
+            clearSessions()
             previewAccess = null
             cache.clear()
             vault.putString("token:${address.origin}", token)
@@ -155,7 +166,7 @@ class Store(context: Context) {
             conversations.values.forEach { it.close() }
             conversations.clear()
             _projects.value = emptyList()
-            _sessions.value = emptyMap()
+            clearSessions()
             previewAccess = null
             cache.clear()
             // Retire the client identity so already-running reads cannot repopulate the cleared cache.
@@ -199,7 +210,7 @@ class Store(context: Context) {
         client = null
         _connection.value = null
         _projects.value = emptyList()
-        _sessions.value = emptyMap()
+        clearSessions()
         conversations.values.forEach { it.close() }
         conversations.clear()
         previewAccess = null
@@ -239,7 +250,15 @@ class Store(context: Context) {
         cache.write("sessions", sessions)
         _projects.value = Project.list(projects)
         _sessions.value = Session.list(sessions).associateBy { it.id }
+        _sessionsKnown.value = true
         _refreshed.update { it + 1 }
+    }
+
+    /** Drops the sessions of a connection that is gone or changed, with what was known about reading them. */
+    private fun clearSessions() {
+        _sessions.value = emptyMap()
+        _sessionsKnown.value = false
+        _refreshed.value = 0
     }
 
     fun upsert(session: Session) {

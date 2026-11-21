@@ -50,9 +50,11 @@ fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> U
     val link by store.link.collectAsState()
     val connection by store.connection.collectAsState()
     val refreshed by store.refreshed.collectAsState()
+    val sessionsKnown by store.sessionsKnown.collectAsState()
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(refreshes) }
-    var failedOn by remember { mutableStateOf<StatusRefresh.Failure?>(null) }
+    // A failure belongs to its connection: the refresh count restarts and the empty list looks the same on the next one.
+    var failedOn by remember(connection?.address, connection?.device) { mutableStateOf<StatusRefresh.Failure?>(null) }
     val failed = StatusRefresh.stillFailed(failedOn, sessions, refreshed)
     suspend fun refresh() {
         refreshing = true
@@ -68,7 +70,7 @@ fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> U
     val counts = SessionList.counts(all)
     val waiting = SessionList.needingYou(all)
     val working = all.filter { it.isActive && it.parentId == null }.sortedBy { it.title }
-    val unknown = refreshes && StatusRefresh.nothingLoaded(sessions, refreshed)
+    val unknown = refreshes && StatusRefresh.nothingLoaded(sessions, sessionsKnown)
 
     LazyColumn(Modifier.fillMaxSize().background(p.canvas), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
@@ -177,6 +179,9 @@ internal object StatusRefresh {
     fun stillFailed(failure: Failure?, sessions: Map<String, Session>, refreshed: Long): Boolean =
         failure != null && failure.sessions === sessions && failure.refreshed == refreshed
 
-    /** Nothing cached and no refresh succeeded yet: zero counts and "all quiet" would be guesses. A loaded empty list is not. */
-    fun nothingLoaded(sessions: Map<String, Session>, refreshed: Long): Boolean = sessions.isEmpty() && refreshed == 0L
+    /**
+     * No list of this connection's sessions yet, neither saved nor refreshed: zero counts and "all quiet" would be
+     * guesses. A known empty list is not.
+     */
+    fun nothingLoaded(sessions: Map<String, Session>, known: Boolean): Boolean = sessions.isEmpty() && !known
 }
