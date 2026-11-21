@@ -19,7 +19,7 @@ Two independent candidates considered native Views with feature fragments and re
 
 The selected design keeps the existing core/app boundary and adds a phone/tablet shell. It incorporates two corrections from the Views candidate: uncertain writes require a successful refresh before sending again, and navigation state must survive width changes instead of belonging to a pane's temporary layout.
 
-The contract's 1024dp breakpoint and 268dp sidebar remain authoritative. On a narrow display, Android Back replaces a permanent sidebar. The bottom navigation follows Swift's Projects, Findings, Usage and Settings tabs. The board is read-only in this port, avoiding an unsafe immediate refresh after a GitHub Projects write.
+The contract's 1024dp breakpoint and 268dp sidebar remain authoritative. On a narrow display, Android Back replaces a permanent sidebar. The bottom navigation follows Swift's Projects, Status, Usage and Settings tabs. The board is read-only in this port, avoiding an unsafe immediate refresh after a GitHub Projects write.
 
 ## Verification boundaries
 

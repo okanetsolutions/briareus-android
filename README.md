@@ -13,7 +13,7 @@ This is an initial Android port, not complete Swift or Windows feature parity. S
 3. Enter your server's HTTPS address and the device token.
 4. Open a project or start a conversation with a Manage token.
 
-Projects, Findings, Usage and Settings are available through the bottom navigation. At 1024dp and wider, the project list stays beside the selected conversation or project page. Narrower windows use a single pane with Android Back navigation. Layout depends on the current window width, so tablet split-screen behaves like a narrow phone when necessary.
+Projects, Status, Usage and Settings are available through the bottom navigation. At 1024dp and wider, the project list stays beside the selected conversation or project page. Narrower windows use a single pane with Android Back navigation. Layout depends on the current window width, so tablet split-screen behaves like a narrow phone when necessary.
 
 Compose follows the system's light or dark theme. Text fields accept the Android keyboard, with optional voice notes. Agent replies render Markdown, selectable code and horizontally scrolling tables with **Copy table**.
 

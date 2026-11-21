@@ -23,7 +23,7 @@ import com.okanetsolutions.briareus.android.Store
 fun stateColor(state: Session.State): Color {
     val p = LocalPalette.current
     return when (state) {
-        Session.State.WAITING, Session.State.FINDINGS -> p.warn
+        Session.State.WAITING -> p.warn
         Session.State.WORKING -> p.accent
         Session.State.IDLE -> p.ok
         Session.State.FAILED -> p.danger
