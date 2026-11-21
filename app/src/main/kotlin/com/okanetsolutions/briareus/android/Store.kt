@@ -56,6 +56,14 @@ class Store(context: Context) {
     private val _sessions = MutableStateFlow<Map<String, Session>>(emptyMap())
     val sessions: StateFlow<Map<String, Session>> = _sessions.asStateFlow()
 
+    private val _refreshed = MutableStateFlow(0L)
+
+    /**
+     * How many refreshes have succeeded. A screen that saw one fail learns from it that a later one replaced what it
+     * warned about, even when the lists came back equal and [sessions] did not change.
+     */
+    val refreshed: StateFlow<Long> = _refreshed.asStateFlow()
+
     enum class Link { OFFLINE, CONNECTING, LIVE }
     private val _link = MutableStateFlow(Link.OFFLINE)
     val link: StateFlow<Link> = _link.asStateFlow()
@@ -231,6 +239,7 @@ class Store(context: Context) {
         cache.write("sessions", sessions)
         _projects.value = Project.list(projects)
         _sessions.value = Session.list(sessions).associateBy { it.id }
+        _refreshed.update { it + 1 }
     }
 
     fun upsert(session: Session) {
