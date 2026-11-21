@@ -14,6 +14,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 
+/** The bottom navigation's tabs. */
+internal val TABS = listOf("Projects", "Status", "Usage", "Settings")
+
+/** The tab to show for one saved by an earlier run: the Findings tab became Status; anything else unknown is Projects. */
+internal fun restoredTab(saved: String?): String = if (saved == "Findings") "Status" else saved?.takeIf { it in TABS } ?: "Projects"
+
 /**
  * What the main window shows, held outside it so the voice can change it from its own panel. Also opens the other windows and the browser beside them, as the screens' own buttons do.
  */
@@ -48,7 +54,7 @@ class Navigator(context: Context, private val store: Store) {
             history.addAll(saved.dropLast(1))
             current.value = saved.last()
         }
-        tab.value = state.getString("tab") ?: "Projects"
+        tab.value = restoredTab(state.getString("tab"))
     }
     init {
         // A forgotten connection takes what was on screen with it.

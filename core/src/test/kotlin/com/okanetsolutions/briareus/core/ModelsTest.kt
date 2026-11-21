@@ -38,6 +38,10 @@ class ModelsTest {
         fun s(extra: String) = Session(json("""{"id":"s","repo":"o/a","title":"T",$extra}"""))
         assertEquals(Session.State.WAITING, s(""""status":"idle","awaitingAnswer":true""").state)
         assertEquals(Session.State.IDLE, s(""""status":"idle"""").state)
+        // The server dropped held review rounds; a stray reviewTriage from an older server is an ordinary idle session.
+        val heldRound = s(""""status":"idle","reviewTriage":{"findings":[{}]}""")
+        assertEquals(Session.State.IDLE, heldRound.state)
+        assertFalse(heldRound.state.needsYou)
         assertEquals(Session.State.WORKING, s(""""status":"preparing"""").state)
         assertEquals(Session.State.FAILED, s(""""status":"failed"""").state)
         assertEquals(Session.State.CLOSED, s(""""status":"interrupted"""").state)

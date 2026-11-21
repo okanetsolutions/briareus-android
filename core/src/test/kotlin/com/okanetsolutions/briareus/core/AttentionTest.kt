@@ -26,6 +26,12 @@ class AttentionTest {
         assertNull(t.update(s("idle")))
     }
 
+    @Test fun aStrayReviewRoundIsAFinishedTurn() {
+        val t = AttentionTracker()
+        t.update(s("running"))
+        assertEquals(Alert.Kind.FINISHED, t.update(s("idle", ""","reviewTriage":{"findings":[{}]}"""))!!.kind)
+    }
+
     @Test fun questionsAndFailures() {
         val t = AttentionTracker()
         t.update(s("running"))

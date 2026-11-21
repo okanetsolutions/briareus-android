@@ -20,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import com.okanetsolutions.briareus.android.Navigator
 import com.okanetsolutions.briareus.android.Store
+import com.okanetsolutions.briareus.android.TABS
 
 /** One task on a phone; the same selection keeps its list beside it on a wide tablet. */
 @Composable
@@ -35,7 +36,7 @@ fun AndroidShell(
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
             when (tab) {
-                "Status" -> StatusScreen(store) { navigator.open(Pane.Open(it)) }
+                "Status" -> StatusScreen(store, refreshes = true) { navigator.open(Pane.Open(it)) }
                 "Usage" -> UsageScreen(store, onBack = null)
                 "Settings" -> SettingsScreen(store, notificationsEnabled, onBackgroundAlerts)
                 else -> HomeScreen(
@@ -45,7 +46,7 @@ fun AndroidShell(
             }
         }
         NavigationBar {
-            listOf("Projects" to Icons.Outlined.Folder, "Status" to Icons.Outlined.Dashboard, "Usage" to Icons.Outlined.BarChart, "Settings" to Icons.Outlined.Settings)
+            TABS.zip(listOf(Icons.Outlined.Folder, Icons.Outlined.Dashboard, Icons.Outlined.BarChart, Icons.Outlined.Settings))
                 .forEach { (label, icon) ->
                     NavigationBarItem(selected = tab == label, onClick = { navigator.tab.value = label }, icon = { Icon(icon, null) }, label = { Text(label) })
                 }

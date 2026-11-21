@@ -34,17 +34,27 @@ import androidx.compose.ui.unit.dp
 import com.okanetsolutions.briareus.core.Session
 import com.okanetsolutions.briareus.core.SessionList
 import com.okanetsolutions.briareus.android.Store
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
  * The status panel: a narrow window to keep beside a video. Counts at the top, then every conversation waiting for you
- * with a quick reply (the agent's options as buttons), then what is working right now.
+ * with a quick reply (the agent's options as buttons), then what is working right now. As the main window's Status tab it
+ * [refreshes] the sessions when it opens and whenever the connection changes, and says when that fails.
  */
 @Composable
-fun StatusScreen(store: Store, onOpen: (String) -> Unit) {
+fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> Unit) {
     val p = LocalPalette.current
     val sessions by store.sessions.collectAsState()
     val link by store.link.collectAsState()
+    val connection by store.connection.collectAsState()
+    var error by remember { mutableStateOf<String?>(null) }
+    if (refreshes) LaunchedEffect(connection?.address) {
+        error = null
+        try { store.refresh() }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) { error = "Could not refresh the conversations. Showing the last loaded status."; store.failed(e) }
+    }
     val all = sessions.values.toList()
     val counts = SessionList.counts(all)
     val waiting = SessionList.needingYou(all)
@@ -57,6 +67,7 @@ fun StatusScreen(store: Store, onOpen: (String) -> Unit) {
                 LinkIndicator(link)
             }
         }
+        error?.let { message -> item { Text(message, color = p.warn) } }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Count("Need you", counts.needsYou, p.accent, Modifier.weight(1f))
