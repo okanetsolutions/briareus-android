@@ -40,7 +40,8 @@ import kotlinx.coroutines.launch
 /**
  * The status panel: a narrow window to keep beside a video. Counts at the top, then every conversation waiting for you
  * with a quick reply (the agent's options as buttons), then what is working right now. As the main window's Status tab it
- * [refreshes] the sessions when it opens and whenever the connection changes, and says when that fails.
+ * [refreshes] the sessions when it opens, whenever the connection changes and on its Refresh button, and says when that
+ * fails until a later refresh or a live update brings newer sessions.
  */
 @Composable
 fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> Unit) {
@@ -48,13 +49,21 @@ fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> U
     val sessions by store.sessions.collectAsState()
     val link by store.link.collectAsState()
     val connection by store.connection.collectAsState()
-    var error by remember { mutableStateOf<String?>(null) }
-    if (refreshes) LaunchedEffect(connection?.address) {
-        error = null
+    val scope = rememberCoroutineScope()
+    var refreshing by remember { mutableStateOf(refreshes) }
+    // The sessions on screen when the last refresh failed. A refresh replaces them only on success, so once they change,
+    // by a later refresh or a live event, the warning is out of date.
+    var failedOn by remember { mutableStateOf<Map<String, Session>?>(null) }
+    val failed = failedOn != null && failedOn === sessions
+    suspend fun refresh() {
+        refreshing = true
+        failedOn = null
         try { store.refresh() }
         catch (e: CancellationException) { throw e }
-        catch (e: Exception) { error = "Could not refresh the conversations. Showing the last loaded status."; store.failed(e) }
+        catch (e: Exception) { failedOn = store.sessions.value; store.failed(e) }
+        finally { refreshing = false }
     }
+    if (refreshes) LaunchedEffect(connection?.address) { refresh() }
     val all = sessions.values.toList()
     val counts = SessionList.counts(all)
     val waiting = SessionList.needingYou(all)
@@ -65,9 +74,10 @@ fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> U
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Status", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = p.ink)
                 LinkIndicator(link)
+                if (refreshes) TextButton(enabled = !refreshing, onClick = { scope.launch { refresh() } }) { Text(if (refreshing) "Refreshing…" else "Refresh") }
             }
         }
-        error?.let { message -> item { Text(message, color = p.warn) } }
+        if (failed) item { Text("Could not refresh the conversations. Showing the last loaded status.", color = p.warn) }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Count("Need you", counts.needsYou, p.accent, Modifier.weight(1f))
@@ -90,7 +100,15 @@ fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> U
                 )
             }
         }
-        if (waiting.isEmpty() && working.isEmpty()) item { Text("All quiet. Nothing is running and nothing waits for you.", color = p.muted) }
+        if (waiting.isEmpty() && working.isEmpty()) {
+            // With nothing loaded yet, "all quiet" would be a guess: say it is loading, or leave the failure alone.
+            val unknown = refreshes && sessions.isEmpty()
+            when {
+                unknown && refreshing -> item { Text("Loading conversations…", color = p.muted) }
+                unknown && failed -> Unit
+                else -> item { Text("All quiet. Nothing is running and nothing waits for you.", color = p.muted) }
+            }
+        }
     }
 }
 
