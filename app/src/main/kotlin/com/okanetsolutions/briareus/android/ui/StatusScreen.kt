@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,8 +41,8 @@ import kotlinx.coroutines.launch
 /**
  * The status panel: a narrow window to keep beside a video. Counts at the top, then every conversation waiting for you
  * with a quick reply (the agent's options as buttons), then what is working right now. As the main window's Status tab it
- * [refreshes] the sessions when it opens, whenever the connection changes and on its Refresh button, and says when that
- * fails until a later refresh succeeds or a live update brings newer sessions.
+ * [refreshes] the sessions when it opens, when the connection changes or drops its sessions, and on its Refresh button,
+ * and says when that fails until a refresh succeeds.
  */
 @Composable
 fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> Unit) {
@@ -49,28 +50,33 @@ fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> U
     val sessions by store.sessions.collectAsState()
     val link by store.link.collectAsState()
     val connection by store.connection.collectAsState()
+    val epoch by store.epoch.collectAsState()
     val refreshed by store.refreshed.collectAsState()
     val sessionsKnown by store.sessionsKnown.collectAsState()
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(refreshes) }
-    // A failure belongs to its connection: the refresh count restarts and the empty list looks the same on the next one.
-    var failedOn by remember(connection?.address, connection?.device) { mutableStateOf<StatusRefresh.Failure?>(null) }
-    val failed = StatusRefresh.stillFailed(failedOn, sessions, refreshed, sessionsKnown)
+    var failure by remember { mutableStateOf<StatusRefresh.Mark?>(null) }
+    val failed = StatusRefresh.stillFailed(failure, StatusRefresh.Mark(epoch, refreshed))
+    // Only the latest refresh speaks: one the effect cancelled for a newer one must not end the newer one's "Loading".
+    var latest by remember { mutableIntStateOf(0) }
     suspend fun refresh() {
+        val run = ++latest
         refreshing = true
-        failedOn = null
-        val before = store.refreshed.value
+        failure = null
+        fun mark() = StatusRefresh.Mark(store.epoch.value, store.refreshed.value)
+        val before = mark()
         try { store.refresh() }
         catch (e: CancellationException) { throw e }
-        catch (e: Exception) { failedOn = StatusRefresh.failure(store.sessions.value, before, store.refreshed.value); store.failed(e) }
-        finally { refreshing = false }
+        catch (e: Exception) { if (run == latest) failure = StatusRefresh.failure(before, mark()); store.failed(e) }
+        finally { if (run == latest) refreshing = false }
     }
-    if (refreshes) LaunchedEffect(connection?.address) { refresh() }
+    if (refreshes) LaunchedEffect(connection?.address, epoch) { refresh() }
     val all = sessions.values.toList()
     val counts = SessionList.counts(all)
     val waiting = SessionList.needingYou(all)
     val working = all.filter { it.isActive && it.parentId == null }.sortedBy { it.title }
-    val unknown = refreshes && StatusRefresh.nothingLoaded(sessionsKnown)
+    // No list of this connection's sessions yet, neither saved nor refreshed: counts and "all quiet" would be guesses.
+    val unknown = refreshes && !sessionsKnown
 
     LazyColumn(Modifier.fillMaxSize().background(p.canvas), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
@@ -80,14 +86,16 @@ fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> U
                 if (refreshes) TextButton(enabled = !refreshing, onClick = { scope.launch { refresh() } }) { Text(if (refreshing) "Refreshing…" else "Refresh") }
             }
         }
-        if (failed) {
-            item { Text(if (unknown) "Could not load the conversations." else "Could not refresh the conversations. Showing the last loaded status.", color = p.warn) }
-        }
-        if (!unknown) item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Count("Need you", counts.needsYou, p.accent, Modifier.weight(1f))
-                Count("Working", counts.working, p.warn, Modifier.weight(1f))
-                Count("Ready", counts.ready, p.ok, Modifier.weight(1f))
+        if (unknown) {
+            item { if (refreshing) Text("Loading conversations…", color = p.muted) else Text("Could not load the conversations.", color = p.warn) }
+        } else {
+            if (failed) item { Text("Could not refresh the conversations. Showing the last loaded status.", color = p.warn) }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Count("Need you", counts.needsYou, p.accent, Modifier.weight(1f))
+                    Count("Working", counts.working, p.warn, Modifier.weight(1f))
+                    Count("Ready", counts.ready, p.ok, Modifier.weight(1f))
+                }
             }
         }
         if (waiting.isNotEmpty()) item { Text("Waiting for you", style = MaterialTheme.typography.labelMedium, color = p.muted) }
@@ -105,13 +113,7 @@ fun StatusScreen(store: Store, refreshes: Boolean = false, onOpen: (String) -> U
                 )
             }
         }
-        if (waiting.isEmpty() && working.isEmpty()) {
-            when {
-                unknown && refreshing -> item { Text("Loading conversations…", color = p.muted) }
-                unknown -> Unit
-                else -> item { Text("All quiet. Nothing is running and nothing waits for you.", color = p.muted) }
-            }
-        }
+        if (!unknown && waiting.isEmpty() && working.isEmpty()) item { Text("All quiet. Nothing is running and nothing waits for you.", color = p.muted) }
     }
 }
 
@@ -164,28 +166,17 @@ private fun WaitingCard(store: Store, s: Session, onOpen: (String) -> Unit) {
     }
 }
 
-/** When the Status tab's refresh warning applies, and when it has nothing to show yet. Pure, so it is tested on the JVM. */
+/** When the Status tab's refresh warning applies. Pure, so it is tested on the JVM. */
 internal object StatusRefresh {
-    /** What was on screen when a refresh failed: the sessions, and how many refreshes had succeeded. */
-    class Failure(val sessions: Map<String, Session>, val refreshed: Long)
+    /** Where the store's sessions stood: which connection's ([Store.epoch]), after how many successful refreshes. */
+    data class Mark(val epoch: Long, val refreshed: Long)
 
     /**
-     * The failure to warn about, or null when another refresh (the event stream's on reconnect, say) succeeded while
-     * this one ran, so the screen is current.
+     * What a refresh that failed leaves to warn about: the mark it started from, or null when another refresh (the
+     * event stream's on reconnect, say) succeeded or the sessions were dropped while it ran, so it says nothing of now.
      */
-    fun failure(sessions: Map<String, Session>, before: Long, now: Long): Failure? = if (now == before) Failure(sessions, before) else null
+    fun failure(before: Mark, now: Mark): Mark? = before.takeIf { it == now }
 
-    /**
-     * Whether the warning still describes the screen: no refresh has succeeded since and, once the list is [known], no
-     * live event changed the sessions. Before then the sessions on hand are only the few this device upserted (a
-     * followed conversation, one it started), so they leave a failed first load unresolved.
-     */
-    fun stillFailed(failure: Failure?, sessions: Map<String, Session>, refreshed: Long, known: Boolean): Boolean =
-        failure != null && failure.refreshed == refreshed && (!known || failure.sessions === sessions)
-
-    /**
-     * No list of this connection's sessions yet, neither saved nor refreshed: counts and "all quiet" would be guesses,
-     * even with a few upserted sessions on hand. A known list, even an empty one, is not.
-     */
-    fun nothingLoaded(known: Boolean): Boolean = !known
+    /** The warning stands until a refresh succeeds or the connection's sessions are dropped; upserts do not touch it. */
+    fun stillFailed(failure: Mark?, now: Mark): Boolean = failure == now
 }

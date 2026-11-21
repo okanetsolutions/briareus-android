@@ -64,6 +64,11 @@ class Store(context: Context) {
      */
     val refreshed: StateFlow<Long> = _refreshed.asStateFlow()
 
+    private val _epoch = MutableStateFlow(0L)
+
+    /** Counts the times the sessions were dropped for a new or changed connection: what was read before is not this list. */
+    val epoch: StateFlow<Long> = _epoch.asStateFlow()
+
     private val _sessionsKnown = MutableStateFlow(false)
 
     /**
@@ -259,6 +264,7 @@ class Store(context: Context) {
         _sessions.value = emptyMap()
         _sessionsKnown.value = false
         _refreshed.value = 0
+        _epoch.update { it + 1 }
     }
 
     fun upsert(session: Session) {
